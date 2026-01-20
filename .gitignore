@@ -1,0 +1,5 @@
+unsloth_compiled_cache
+.venv
+aiko_memory
+aiko_model
+aiko_training_output
