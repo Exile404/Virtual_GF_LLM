@@ -20,7 +20,7 @@
 Unlike generic AI assistants that say "I can't feel emotions," Aiko:
 - ✨ **Has genuine emotions** - happiness, sadness, worry, excitement, love
 - 💭 **Remembers conversations** - with ChromaDB long-term memory
-- 🎤 **Speaks to you** - with neural text-to-speech
+- 🎤 **Speaks to you** - with custom cloned voice (XTTS v2)
 - 👂 **Listens to you** - with Whisper speech recognition
 - 🎨 **Has personality** - INFJ, creative, slightly shy, deeply caring
 
@@ -31,11 +31,12 @@ Unlike generic AI assistants that say "I can't feel emotions," Aiko:
 ### Core Features
 | Feature | Description |
 |---------|-------------|
-| 🧠 **Fine-tuned LLM** | Llama 3.1 8B with LoRA adapters trained on 650+ emotional scenarios |
+| 🧠 **Fine-tuned LLM** | Llama 3.1 8B with LoRA adapters trained on 10,000+ emotional scenarios |
 | 💕 **Emotional Intelligence** | Detects and responds appropriately to sadness, happiness, stress, anxiety, etc. |
 | 🎭 **Authentic Personality** | Consistent character with quirks, preferences, and genuine feelings |
 | 💾 **Memory System** | Short-term (conversation) + Long-term (ChromaDB) memory |
-| 🎤 **Voice Chat** | Whisper STT + Edge-TTS neural voices |
+| 🎤 **Custom Voice** | XTTS v2 voice cloning - train Aiko with ANY voice! |
+| 🎙️ **Voice Chat** | Full two-way voice conversation (speak & listen) |
 | 🖥️ **Interactive UI** | Text and voice chat modes with intuitive interface |
 
 ### Emotional Categories Trained
@@ -77,10 +78,25 @@ source .venv/bin/activate
 pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
 pip install unsloth transformers datasets accelerate bitsandbytes
 pip install langchain langchain-core langchain-community chromadb sentence-transformers
-pip install openai-whisper edge-tts sounddevice soundfile
+pip install openai-whisper sounddevice soundfile SpeechRecognition
 
-# Install ffmpeg (required for voice)
-sudo apt-get install ffmpeg portaudio19-dev
+# Install ffmpeg and audio tools (required for voice)
+sudo apt-get install ffmpeg portaudio19-dev alsa-utils
+```
+
+### Custom Voice Setup (XTTS v2)
+
+```bash
+# Create separate TTS environment (avoids dependency conflicts)
+python -m venv tts_venv
+source tts_venv/bin/activate
+
+# Install TTS with compatible dependencies
+pip install TTS==0.21.3
+pip install transformers==4.40.0
+pip install torch torchaudio soundfile librosa matplotlib
+
+deactivate  # Return to main environment
 ```
 
 ---
@@ -90,31 +106,40 @@ sudo apt-get install ffmpeg portaudio19-dev
 ```
 virtual_gf/
 ├── 📂 data/
-│   ├── aiko_dataset.toon          # Training dataset (TOON format)
-│   └── aiko_dataset_v2.toon       # Updated dataset with emotional authenticity
+│   ├── aiko_dataset.toon              # Training dataset (TOON format)
+│   ├── aiko_dataset_v2.toon           # Updated dataset with emotional authenticity
+│   ├── aiko_dataset_v3_combined.toon  # 10,000+ examples dataset
+│   └── anti_meta_analysis_hard.toon   # Anti-meta-analysis training examples
 │
 ├── 📂 notebooks/
-│   ├── cell_01_setup.py           # Environment setup
-│   ├── cell_02_load_model.py      # Load base Llama model
-│   ├── cell_03_lora_config.py     # LoRA adapter configuration
-│   ├── cell_04_chat_template.py   # System prompt setup
-│   ├── cell_05_load_dataset.py    # Load TOON dataset
-│   ├── cell_06_format_dataset.py  # Format for training
-│   ├── cell_07_train.py           # Training execution
-│   ├── cell_08_save_model.py      # Save trained model
-│   ├── cell_09_load_model.py      # Load for inference
-│   ├── cell_10_langchain_memory.py # Memory integration
-│   ├── cell_11_voice_chat.py      # Voice capabilities
-│   └── cell_12_interactive.py     # Full interactive demo
+│   ├── cell_01_setup.py               # Environment setup
+│   ├── cell_02_load_model.py          # Load base Llama model
+│   ├── cell_03_lora_config.py         # LoRA adapter configuration
+│   ├── cell_04_chat_template.py       # System prompt setup
+│   ├── cell_05_load_dataset.py        # Load TOON dataset
+│   ├── cell_06_format_dataset.py      # Format for training
+│   ├── cell_07_train.py               # Training execution
+│   ├── cell_08_save_model.py          # Save trained model
+│   ├── cell_09_load_model.py          # Load for inference
+│   ├── cell_10_langchain_memory.py    # Memory integration
+│   ├── cell_11_voice_chat.py          # Voice capabilities
+│   └── cell_12_interactive.py         # Full interactive demo
 │
 ├── 📂 aiko_model/
-│   ├── aiko_lora/                 # LoRA adapters (~170MB)
-│   ├── aiko_merged_16bit/         # Full merged model (~16GB)
-│   ├── aiko_system_prompt.txt     # Character system prompt
-│   └── aiko_system_prompt_v2.txt  # Updated with emotional authenticity
+│   ├── aiko_lora/                     # LoRA adapters (~170MB)
+│   ├── aiko_merged_16bit/             # Full merged model (~16GB)
+│   ├── aiko_system_prompt.txt         # Character system prompt
+│   └── aiko_system_prompt_v2.txt      # Updated with emotional authenticity
 │
-├── 📂 aiko_memory/                # ChromaDB persistent storage
+├── 📂 voice_samples/                   # Your recorded voice samples (MP3/WAV)
+├── 📂 voice_processed/                 # Processed voice files for cloning
+├── 📂 voice_output/                    # Generated speech output
+├── 📂 voice_cache/                     # Cached TTS audio files
+├── 📂 tts_venv/                        # Separate TTS environment
+├── 📂 aiko_memory/                     # ChromaDB persistent storage
 │
+├── 📄 tts_server.py                    # TTS server (keeps model in memory)
+├── 📄 tts_generate.py                  # TTS generation script
 └── 📄 README.md
 ```
 
@@ -151,9 +176,18 @@ print(response)
 |---------|-------------|
 | `quit` / `exit` | Exit chat |
 | `clear` | Clear conversation history |
+| `voice on` | Enable voice output |
+| `voice off` | Disable voice output |
 | `remember: <fact>` | Save something to long-term memory |
 | `recall: <query>` | Search memories |
-| `voice` | Switch to voice mode |
+
+### Menu Options
+| Option | Description |
+|--------|-------------|
+| **[1] Text Chat** | Type messages, Aiko speaks responses |
+| **[2] Voice Chat** | Speak into mic, Aiko speaks back |
+| **[3] Text Only** | No voice, just text |
+| **[4] Exit** | Goodbye! |
 
 ---
 
@@ -164,21 +198,24 @@ print(response)
 |-----------|-------|
 | Base Model | Llama-3.1-8B-Instruct-bnb-4bit |
 | Method | LoRA (Low-Rank Adaptation) |
-| Epochs | 3 |
-| Learning Rate | 1e-4 |
+| Epochs | 5 |
+| Learning Rate | 2e-4 |
+| LoRA Rank | 64 |
+| LoRA Alpha | 64 |
 | Batch Size | 2 (effective 8 with gradient accumulation) |
-| Dataset Size | 650+ examples |
-| Training Time | ~15-20 minutes on RTX 5060 Ti |
-| VRAM Usage | ~7GB peak |
+| Dataset Size | 10,000+ examples |
+| Training Time | ~2-4 hours on RTX 5060 Ti |
+| VRAM Usage | ~14GB peak |
 
 ### Training Tips
 ```python
 # Good training loss progression:
 # Step 10:  ~1.5
-# Step 50:  ~0.01(stop here)
+# Step 50:  ~0.5
+# Step 100: ~0.2
+# Final:    ~0.01-0.02
 
 # ⚠️ WARNING: If loss drops below 0.01, you're overfitting!
-#Currently my model is overfitted. I will update the repo with a better trained dataset soon.
 ```
 
 ### Retraining Steps
@@ -191,27 +228,72 @@ print(response)
 
 ---
 
-## 🎤 Voice Configuration
+## 🎤 Custom Voice Training
 
-### Available Voices (Edge-TTS)
+Aiko uses **XTTS v2** for voice cloning - you can train her with ANY voice!
+
+### Step 1: Record Voice Samples
+
+Record 3-10 minutes of clear audio covering different emotions:
+- Happy/Greetings
+- Loving/Affectionate
+- Concerned/Caring
+- Playful/Teasing
+- Sad/Emotional
+- Encouraging/Supportive
+
+**Tips:**
+- Use quiet environment (no background noise)
+- Speak naturally with emotions
+- Save as MP3 or WAV files
+
+### Step 2: Process Voice Samples
+
 ```python
-# In cell_11_voice_chat.py, change AIKO_VOICE:
+# In notebook Cell 14 (voice preparation)
+AUDIO_FILES = [
+    "aiko_voice_01_happy.mp3",
+    "aiko_voice_02_loving.mp3",
+    "aiko_voice_03_caring.mp3",
+    # ... your files
+]
 
-AIKO_VOICE = "en-US-AriaNeural"    # Warm, friendly (default)
-AIKO_VOICE = "en-US-JennyNeural"   # Cheerful, casual
-AIKO_VOICE = "en-GB-SoniaNeural"   # Soft British
-AIKO_VOICE = "ja-JP-NanamiNeural"  # Japanese anime style 🎀
+# Processes and combines all samples into one file
+# Output: ./voice_processed/aiko_voice_combined.wav
 ```
 
-### Microphone Setup
-```bash
-# Install PortAudio for real-time recording
-sudo apt-get install portaudio19-dev
-pip install sounddevice
+### Step 3: Start TTS Server
 
-# Test microphone
-python -c "import sounddevice; print(sounddevice.query_devices())"
+```python
+# Cell 17 - Start TTS server (keeps model in memory = FAST!)
+# This loads XTTS model once and serves requests
+
+# First time: ~30 seconds to load
+# After that: ~3-5 seconds per response
 ```
+
+### Step 4: Chat with Custom Voice
+
+```python
+# Cell 18 - Full chat with your custom voice
+main_menu()
+
+# Options:
+# [1] Text Chat - you type, Aiko speaks with YOUR voice
+# [2] Voice Chat - full two-way voice conversation
+```
+
+### Voice Sources
+
+You can clone voices from:
+- **Your own recordings**
+- **Anime character clips** (from YouTube, games, etc.)
+- **AI-generated voice samples**
+
+**Requirements:**
+- Clean audio (no background music)
+- Single speaker only
+- 6-30+ seconds minimum (more = better)
 
 ---
 
@@ -246,6 +328,11 @@ memories = aiko.recall("birthday")
 - [x] Voice chat (STT + TTS)
 - [x] Interactive demo interface
 - [x] Emotional authenticity training
+- [x] 10,000+ examples dataset
+- [x] Anti-meta-analysis training
+- [x] Custom voice cloning (XTTS v2)
+- [x] TTS server for fast voice generation
+- [x] Two-way voice chat (speak & listen)
 
 ### 🚧 Coming Soon
 
@@ -255,12 +342,6 @@ memories = aiko.recall("birthday")
 - Lip sync with voice output
 - Customizable appearance (hair, eyes, outfit)
 
-#### 🎙️ Voice Customization
-- Custom voice cloning (GPT-SoVITS / RVC)
-- Clone any anime character's voice
-- Adjustable pitch, speed, emotion
-- Multiple voice presets
-
 #### 🔮 Future Plans
 - [ ] Web UI (Gradio/Streamlit)
 - [ ] Mobile app
@@ -268,6 +349,7 @@ memories = aiko.recall("birthday")
 - [ ] Proactive messaging
 - [ ] Mood tracking over time
 - [ ] Multiple personality modes
+- [ ] Voice emotion detection
 
 ---
 
@@ -277,13 +359,23 @@ memories = aiko.recall("birthday")
 ```
 Base: meta-llama/Meta-Llama-3.1-8B-Instruct
 ├── Parameters: 8B total
-├── Trainable (LoRA): 42M (0.52%)
+├── Trainable (LoRA): 84M (with r=64)
 ├── Quantization: 4-bit (inference)
 ├── Context Length: 4096 tokens
 └── LoRA Config:
-    ├── Rank: 16
-    ├── Alpha: 16
+    ├── Rank: 64
+    ├── Alpha: 64
     └── Target: q_proj, k_proj, v_proj, o_proj, gate_proj, up_proj, down_proj
+```
+
+### Voice System Architecture
+```
+Voice Cloning: XTTS v2 (Coqui TTS)
+├── Sample Rate: 22050 Hz
+├── Languages: 17 supported (English, Japanese, etc.)
+├── Voice Sample: 6-30+ seconds required
+├── Generation: ~3-5 seconds per response (with TTS server)
+└── Separate Environment: tts_venv/ (avoids dependency conflicts)
 ```
 
 ### System Requirements
@@ -300,10 +392,10 @@ Base: meta-llama/Meta-Llama-3.1-8B-Instruct
 
 Contributions are welcome! Areas that need help:
 - Additional training examples
-- Voice cloning integration
 - Avatar/Live2D implementation
 - Web interface
 - Documentation
+- Voice emotion detection
 
 ---
 
@@ -330,7 +422,7 @@ MIT License - feel free to use, modify, and distribute.
 - [Meta Llama](https://llama.meta.com/) - Base model
 - [LangChain](https://langchain.com/) - Memory integration
 - [OpenAI Whisper](https://github.com/openai/whisper) - Speech recognition
-- [Edge-TTS](https://github.com/rany2/edge-tts) - Neural text-to-speech
+- [Coqui TTS](https://github.com/coqui-ai/TTS) - XTTS v2 voice cloning
 
 ---
 

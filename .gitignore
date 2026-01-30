@@ -3,4 +3,7 @@ unsloth_compiled_cache
 aiko_memory
 aiko_model
 aiko_training_output
-
+tts_venv/
+voice_cache/
+voice_processed/
+voice_output/
